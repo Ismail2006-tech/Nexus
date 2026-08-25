@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Plus, Trash2, ChevronLeft, ChevronRight, Download, Sparkles, Loader2 } from "lucide-react";
+import { Plus, Trash2, ChevronLeft, ChevronRight, Download, Sparkles, Loader2, CheckCircle2 } from "lucide-react";
 import ResumePreview, { ResumeData } from "@/components/dashboard/ResumePreview";
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
@@ -27,19 +27,75 @@ export default function ResumeBuilderPage() {
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [pdfError, setPdfError] = useState("");
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
-  // Load from local storage on mount
+  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+  const isFirstRender = useRef(true);
+
+  // Load from DB on mount
   useEffect(() => {
-    const saved = localStorage.getItem("nexus_resume_data");
-    if (saved) {
-      try { setData(JSON.parse(saved)); } catch (e) {}
-    }
+    const fetchResume = async () => {
+      try {
+        const res = await fetch('/api/resume');
+        if (res.ok) {
+          const savedData = await res.json();
+          if (savedData) {
+            setData(savedData);
+          } else {
+            // fallback to local storage
+            const localSaved = localStorage.getItem("nexus_resume_data");
+            if (localSaved) {
+              setData(JSON.parse(localSaved));
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch resume:", error);
+      } finally {
+        setIsInitialLoad(false);
+      }
+    };
+    fetchResume();
   }, []);
 
-  // Save to local storage on change
+  // Save to local storage and DB on change (debounced)
   useEffect(() => {
     localStorage.setItem("nexus_resume_data", JSON.stringify(data));
-  }, [data]);
+    
+    if (isFirstRender.current || isInitialLoad) {
+      isFirstRender.current = false;
+      return;
+    }
+
+    setSaveStatus("saving");
+
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+
+    debounceTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/resume', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        if (res.ok) {
+          setSaveStatus("saved");
+        } else {
+          setSaveStatus("idle");
+        }
+      } catch (error) {
+        console.error("Failed to save resume:", error);
+        setSaveStatus("idle");
+      }
+    }, 800);
+
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
+  }, [data, isInitialLoad]);
 
   const resumeRef = useRef<HTMLDivElement>(null);
   
@@ -60,7 +116,7 @@ export default function ResumeBuilderPage() {
       const opt = {
         margin:       0,
         filename:     fileName,
-        image:        { type: 'jpeg', quality: 0.98 },
+        image:        { type: 'jpeg' as const, quality: 0.98 },
         html2canvas:  { scale: 2, useCORS: true },
         jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
       };
@@ -150,13 +206,25 @@ export default function ResumeBuilderPage() {
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0 }}>Step {currentStep} of {totalSteps}</p>
             {pdfError && <p style={{ color: '#ef4444', fontSize: '0.85rem', margin: '4px 0 0 0' }}>{pdfError}</p>}
           </div>
-          <button onClick={handlePrint} disabled={isGeneratingPdf} className="btn btn-primary" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', padding: '0.5rem 1rem' }}>
-            {isGeneratingPdf ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />} 
-            {isGeneratingPdf ? "Generating..." : "Export PDF"}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            {saveStatus === "saving" && (
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                <Loader2 size={12} className="animate-spin" /> Saving...
+              </span>
+            )}
+            {saveStatus === "saved" && (
+              <span style={{ fontSize: '0.85rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                <CheckCircle2 size={12} /> Saved
+              </span>
+            )}
+            <button onClick={handlePrint} disabled={isGeneratingPdf || isInitialLoad} className="btn btn-primary" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', padding: '0.5rem 1rem' }}>
+              {isGeneratingPdf ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />} 
+              {isGeneratingPdf ? "Generating..." : "Export PDF"}
+            </button>
+          </div>
         </div>
         
-        <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', opacity: isInitialLoad ? 0.5 : 1, pointerEvents: isInitialLoad ? 'none' : 'auto' }}>
           
           {/* STEP 1: PERSONAL DETAILS */}
           {currentStep === 1 && (
