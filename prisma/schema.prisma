@@ -1,0 +1,163 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// NextAuth Models
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?
+  access_token       String?
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  password      String?
+  image         String?
+  
+  accounts      Account[]
+  sessions      Session[]
+  profile       Profile?
+  
+  roadmapProgress    TopicProgress[]
+  mockTestResults    TestResult[]
+  interviewResults   InterviewResult[]
+  aiConversations    AiConversation[]
+  savedProjects      SavedProject[]
+  careerRoadmaps     CareerRoadmap[]
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Application Models
+model Profile {
+  id                String @id @default(cuid())
+  userId            String @unique
+  user              User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  college           String?
+  branch            String?
+  yearOfStudy       String?
+  skills            String? 
+  placementReadiness Float @default(0.0) 
+}
+
+model TopicProgress {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stage       Int      
+  topicId     String
+  topicName   String
+  completed   Boolean  @default(false)
+  completedAt DateTime?
+
+  @@unique([userId, topicId])
+}
+
+model TestResult {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category    String
+  score       Int
+  total       Int
+  percentage  Float
+  timeTaken   Int      
+  createdAt   DateTime @default(now())
+}
+
+model InterviewResult {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type             String   
+  overallScore     Float
+  communication    Float
+  technical        Float
+  confidence       Float
+  feedbackReport   String   
+  weakAreas        String
+  strongAreas      String
+  createdAt        DateTime @default(now())
+}
+
+model AiConversation {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   
+  topic     String?
+  messages  String   
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PlacementEvent {
+  id                 String   @id @default(cuid())
+  companyName        String
+  eventType          String   
+  eventDate          DateTime
+  location           String
+  registrationStatus String   
+  createdAt          DateTime @default(now())
+}
+
+model SavedProject {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectName     String
+  domain          String
+  level           String
+  description     String
+  technologies    String   
+  difficulty      String
+  status          String   @default("Interested")
+  placementValue  String
+  createdAt       DateTime @default(now())
+}
+
+model CareerRoadmap {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  careerGoal      String
+  roadmapData     String   
+  progress        Float    @default(0.0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
